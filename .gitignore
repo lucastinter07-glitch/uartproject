@@ -1,0 +1,19 @@
+# --- GHDL working library & build artifacts ---
+work-obj*.cf
+*.o
+*.exe
+*.lst
+
+# --- Simulation output (waveforms are regenerated from source) ---
+*.vcd
+*.ghw
+*.fst
+
+# Keep GTKWave save files (.gtkw) — they capture the annotated signal layout.
+
+# --- OS / editor cruft ---
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+*.tmp
