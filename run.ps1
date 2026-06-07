@@ -13,20 +13,28 @@ param(
 $ErrorActionPreference = "Stop"
 $Std = "--std=08"
 
-# Collect every source under rtl/ and tb/. PowerShell expands the globs, so we
-# don't depend on GHDL's own wildcard handling.
+# Run GHDL and abort if it returns a non-zero exit code (PowerShell's Stop
+# preference does NOT catch native-exe failures on its own).
+function Invoke-GHDL {
+    param([string[]]$GhdlArgs)
+    & ghdl @GhdlArgs
+    if ($LASTEXITCODE -ne 0) {
+        throw "GHDL failed (exit $LASTEXITCODE): ghdl $($GhdlArgs -join ' ')"
+    }
+}
+
 $Sources = Get-ChildItem -Path rtl\*.vhd, tb\*.vhd -ErrorAction SilentlyContinue
 if (-not $Sources) { throw "No .vhd files found in rtl\ or tb\." }
 
 Write-Host "==> Importing $($Sources.Count) source file(s)..." -ForegroundColor Cyan
-ghdl -i $Std $Sources.FullName
+Invoke-GHDL (@('-i', $Std) + $Sources.FullName)
 
 Write-Host "==> Building $Top (dependency-ordered analyze + elaborate)..." -ForegroundColor Cyan
-ghdl -m $Std $Top
+Invoke-GHDL @('-m', $Std, $Top)
 
 Write-Host "==> Running $Top..." -ForegroundColor Cyan
-ghdl -r $Std $Top --vcd="$Top.vcd"
+Invoke-GHDL @('-r', $Std, $Top, "--vcd=$Top.vcd")
 
 Write-Host ""
-Write-Host "==> GHDL exited cleanly. Inspect the waveform with:" -ForegroundColor Green
+Write-Host "==> PASS: GHDL exited cleanly. Inspect the waveform with:" -ForegroundColor Green
 Write-Host "    gtkwave $Top.vcd"
