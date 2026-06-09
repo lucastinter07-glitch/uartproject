@@ -33,8 +33,8 @@ Write-Host "==> Building $Top (dependency-ordered analyze + elaborate)..." -Fore
 Invoke-GHDL @('-m', $Std, $Top)
 
 Write-Host "==> Running $Top..." -ForegroundColor Cyan
-Invoke-GHDL @('-r', $Std, $Top, "--vcd=$Top.vcd")
+Invoke-GHDL @('-r', $Std, $Top, "--vcd=$Top.ghw")
 
 Write-Host ""
 Write-Host "==> PASS: GHDL exited cleanly. Inspect the waveform with:" -ForegroundColor Green
-Write-Host "    gtkwave $Top.vcd"
+Write-Host "    gtkwave $Top.ghw"
