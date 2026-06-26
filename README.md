@@ -4,10 +4,7 @@ A parameterized **UART serial transceiver** written in VHDL-2008 and verified
 end-to-end in simulation with **GHDL** and **GTKWave**. Implements full-duplex
 8N1 framing at 9600 baud on a 50 MHz clock, with 16× oversampling, a
 clock-domain-crossing input synchronizer, glitch rejection, and framing-error
-detection — all proven by a self-checking testbench suite.
-
-> Status: core build complete. All four RTL modules implemented and verified
-> (milestones M1–M4). FPGA hardware bring-up is in progress.
+detection. All features proven by a self-checking testbench suite.
 
 ---
 
@@ -32,30 +29,38 @@ detection — all proven by a self-checking testbench suite.
 
 ## Architecture
 
-```
-                          uart_top
-   ┌───────────────────────────────────────────────────────┐
-   │  clk, rst ─► baud_gen ─► sample_tick (16× baud) ─┬──┐   │
-   │                                                  │  │   │
-   │  tx_data ─►┌──────────┐                          ▼  │   │
-   │  tx_start ►│ uart_tx  │── serial_out ───────────────┼──►│ serial_out (pin)
-   │  tx_busy ◄─└──────────┘                             │   │
-   │                                                     ▼   │
-   │  serial_in (pin) ─►[2-FF sync]►┌──────────┐  sample_tick│
-   │                                │ uart_rx  │── rx_data ──┼──► rx_data
-   │                                └──────────┘── data_valid┼──► data_valid
-   │                                            ── framing_error──►
-   └───────────────────────────────────────────────────────┘
+![Architecture](c:\Users\lucas\Downloads\IMG_0134.jpeg)
 
-   Loopback test: serial_out ─► serial_in (tied in the testbench)
-```
+
+`uart_top` is purely structural. `uart_tx` and `uart_rx` each pair a **shift
+register** (the datapath) with a **control FSM** (the controller). A single
+`baud_gen` produces one 16× `sample_tick` that is shared by both FSMs, so they
+count the same ticks per bit and can never drift apart. On the receive side,
+`serial_in` is asynchronous, so it first passes through a **2-flip-flop
+synchronizer** before the receiver logic reads it. There are no separate hold
+registers — without a FIFO, the transmitter loads `tx_data` straight into its
+shift register and the receiver latches each finished byte onto `rx_data`. The
+loopback path (dashed) is tied only in the testbench.
 
 | Module       | Role                                                              |
 |--------------|------------------------------------------------------------------|
 | `baud_gen`   | Divides the clock to a single 1-cycle `sample_tick` at 16× baud.  |
-| `uart_tx`    | FSM that serializes a byte as an 8N1 frame (start, 8 data LSB-first, stop). |
-| `uart_rx`    | FSM that synchronizes the input, detects the start bit, samples each bit at its midpoint, and recovers the byte. |
-| `uart_top`   | Structural top level; wires the three blocks and shares one tick. |
+| `uart_tx`    | FSM + shift register that serializes a byte as an 8N1 frame (start, 8 data LSB-first, stop). |
+| `uart_rx`    | 2-FF synchronizer + FSM + shift register that detects the start bit, samples each bit at its midpoint, and recovers the byte. |
+| `uart_top`   | Structural top level; instantiates the three blocks and shares one tick. |
+
+---
+
+## Frame format (8N1)
+
+![8N1 frame timing](![Architecture](c:\Users\lucas\Downloads\IMG_0135.jpeg))
+
+The line idles high. A **start bit** (low) marks the beginning of a byte,
+followed by **8 data bits sent LSB-first** (D0–D7), then a **stop bit** (high)
+that returns the line to idle. The receiver samples each bit at its **midpoint**
+(red), anchored from the middle of the start bit — the point farthest from the
+switching edges, which gives maximum tolerance to clock mismatch between the two
+ends.
 
 ---
 
@@ -63,16 +68,16 @@ detection — all proven by a self-checking testbench suite.
 
 ```
 rtl/
-  baud_gen.vhd        oversample tick generator
-  uart_tx.vhd         transmitter FSM
-  uart_rx.vhd         receiver FSM (+ 2-FF synchronizer)
-  uart_top.vhd        structural top level
+  baud_gen.vhd          oversample tick generator
+  uart_tx.vhd           transmitter FSM + shift register
+  uart_rx.vhd           receiver FSM + shift register (+ 2-FF synchronizer)
+  uart_top.vhd          structural top level
 tb/
-  tb_baud_gen.vhd     tick-spacing check
-  tb_uart_tx.vhd      frame-format check
-  tb_uart_rx.vhd      byte recovery + glitch/framing tests
+  tb_baud_gen.vhd       tick-spacing check
+  tb_uart_tx.vhd        frame-format check
+  tb_uart_rx.vhd        byte recovery + glitch/framing tests
   tb_uart_loopback.vhd  end-to-end loopback (real baud_gen)
-run.ps1               build + simulate harness
+run.ps1                 build + simulate harness
 README.md
 ```
 
@@ -93,10 +98,16 @@ gtkwave tb_uart_loopback.ghw
 Or with raw GHDL:
 
 ```bash
-ghdl -i --std=08 rtl/*.vhd tb/*.vhd
-ghdl -m --std=08 tb_uart_loopback
-ghdl -r --std=08 tb_uart_loopback --wave=tb_uart_loopback.ghw
+ghdl -i --std=08 rtl/*.vhd tb/*.vhd        # import: catalog the sources
+ghdl -m --std=08 tb_uart_loopback          # make: analyze (dependency-ordered) + elaborate
+ghdl -r --std=08 tb_uart_loopback --wave=tb_uart_loopback.ghw   # run
 ```
+
+This uses GHDL's import/make flow (`-i`/`-m`) rather than the explicit
+analyze/elaborate steps (`-a`/`-e`): `ghdl -m` works out the correct compile
+order automatically, so `uart_top` (which instantiates the other modules) builds
+without files being listed in dependency order by hand. The equivalent explicit
+flow is `ghdl -a` (each file, in order) → `ghdl -e <top>` → `ghdl -r <top>`.
 
 The harness dumps **GHW** (not VCD) so enumerated FSM state signals are visible
 in GTKWave.
@@ -114,18 +125,13 @@ in GTKWave.
 
 All testbenches are self-checking (`assert`/`report`) and self-terminating.
 
-### Waveforms
+![Loopback simulation — full 8N1 frame](c:\Users\lucas\OneDrive\Desktop\Screenshots\Screenshot 2026-06-10 112757.png)
 
-![Single 0x55 frame, loopback](docs/img/loopback_frame.png)
-
-*One frame: start bit, eight LSB-first data bits, stop bit, with `data_valid`
-strobing the recovered byte onto `rx_data`. The TX and RX state machines run in
-lockstep on the shared `sample_tick`.*
-
-![Full 12-byte loopback run](docs/img/loopback_full.png)
-
-*All twelve bytes (per-byte round trip + back-to-back burst). Each transmitted
-byte reappears on `rx_data` one frame later; `framing_error` stays low throughout.*
+Loopback simulation: a transmitted byte appears on `serial_line`, and the
+receiver reproduces it on `rx_data` one frame later, accompanied by a
+`data_valid` strobe. The two `state` rows (transmitter on top, receiver below)
+advance in lockstep on the shared `sample_tick`, and `framing_error` stays low
+throughout.
 
 ---
 
@@ -148,7 +154,9 @@ baud on a 100 MHz board is a one-line generic change.
 ## Design notes
 
 - **8N1, LSB-first**, idle-high line.
-- **Synchronous, active-high reset** throughout (single clock domain).
+- **Synchronous reset** throughout (single clock domain).
+- Datapath vs. control are kept separate: the shift registers hold and move the
+  bits; the FSMs decide when to load, shift, sample, and signal.
 - The transmitter and receiver each count `g_oversample` ticks per bit, so a
   single divisor governs all timing.
 - The receiver validates the start bit at its midpoint (rejecting glitches
@@ -157,7 +165,8 @@ baud on a 100 MHz board is a one-line generic change.
 ## Possible extensions
 
 - Parity (7E1 / 8O1) and configurable data width.
-- TX/RX FIFOs with an AXI-Stream interface.
+- TX/RX FIFOs with an AXI-Stream interface (this is where hold/buffer registers
+  would reappear).
 - Multi-channel instantiation.
 - Runtime-configurable baud via a register interface.
 
