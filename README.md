@@ -29,7 +29,7 @@ detection. All features proven by a self-checking testbench suite.
 
 ## Architecture
 
-![Architecture](<img width="1447" height="919" alt="IMG_0134" src="https://github.com/user-attachments/assets/a3f57841-904c-4372-bd2d-981ca814c029" />)
+<img width="1447" height="919" alt="IMG_0134" src="https://github.com/user-attachments/assets/0f3138b4-9b8c-4abe-8545-b78e84335f3a" />
 
 
 `uart_top` is purely structural. `uart_tx` and `uart_rx` each pair a **shift
@@ -53,8 +53,8 @@ loopback path (dashed) is tied only in the testbench.
 
 ## Frame format (8N1)
 
-![8N1 frame timing](<img width="1209" height="345" alt="IMG_0135" src="https://github.com/user-attachments/assets/2e475598-7dbc-4b7b-a54f-11d664cec524" />
-)
+<img width="1209" height="345" alt="IMG_0135" src="https://github.com/user-attachments/assets/85476fb3-93b6-4882-af32-b7f78c5fe319" />
+
 
 The line idles high. A **start bit** (low) marks the beginning of a byte,
 followed by **8 data bits sent LSB-first** (D0–D7), then a **stop bit** (high)
@@ -126,8 +126,7 @@ in GTKWave.
 
 All testbenches are self-checking (`assert`/`report`) and self-terminating.
 
-![Loopback simulation — full 8N1 frame](<img width="2687" height="1645" alt="Screenshot 2026-06-10 112757" src="https://github.com/user-attachments/assets/3d464627-6147-478c-a970-fe083029a190" />
-)
+<img width="2687" height="1645" alt="Screenshot 2026-06-10 112757" src="https://github.com/user-attachments/assets/b5191aea-cc61-4b64-be83-109144929439" />
 
 Loopback simulation: a transmitted byte appears on `serial_line`, and the
 receiver reproduces it on `rx_data` one frame later, accompanied by a
